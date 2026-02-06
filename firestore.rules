@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Config: list of admin UIDs (set first admin in Firebase Console)
+    match /config/app {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+    // User roles: each user has users/{uid} with { email, role: 'viewer' | 'admin' }
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth.uid == userId;
+      allow update: if request.auth != null
+        && (request.auth.uid == userId && request.resource.data.role == resource.data.role
+            || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      allow delete: if request.auth != null
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    // Sections and section data: viewers can read only, admins can read/write
+    match /sections/{sectionId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'viewer');
+    }
+    match /{sectionId}/{docId} {
+      allow read: if request.auth != null
+        && sectionId.matches('^[a-zA-Z0-9_-]+$');
+      allow write: if request.auth != null
+        && sectionId.matches('^[a-zA-Z0-9_-]+$')
+        && (!exists(/databases/$(database)/documents/users/$(request.auth.uid))
+             || get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role != 'viewer');
+    }
+  }
+}
